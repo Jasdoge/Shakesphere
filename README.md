@@ -22,4 +22,3 @@ Parts list:
 | Wires & Soldering equipment | N/A | N/A |
 | 3D printed Shakesphere (see Assets directory) | N/A | N/A |
 
-Todo: Write readme
