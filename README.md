@@ -1,6 +1,8 @@
 # Shakesphere
 A sphere with an LED you shake and it turns off and on into different colors
 
+See the assets directory for circuit diagram and 3d print models.
+
 Video:
 
 [![View the making of here](https://img.youtube.com/vi/So-5wrXYYBQ/0.jpg)](https://www.youtube.com/watch?v=So-5wrXYYBQ)
@@ -21,4 +23,5 @@ Parts list:
 | CR2032 Battery | 1 | Generic |
 | Wires & Soldering equipment | N/A | N/A |
 | 3D printed Shakesphere (see Assets directory) | N/A | N/A |
+
 
