@@ -1,6 +1,10 @@
 # Shakesphere
 A sphere with an LED you shake and it turns off and on into different colors
 
+Video:
+
+[![View the making of here](https://img.youtube.com/vi/So-5wrXYYBQ/0.jpg)](https://www.youtube.com/watch?v=So-5wrXYYBQ)
+
 Parts list:
 
 | Item | Amount | Where from? |
