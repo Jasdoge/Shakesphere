@@ -1,28 +1,22 @@
-#include <arduino.h>
-#include <avr/io.h>
-#include <avr/interrupt.h>
+//#include <arduino.h>
+//#include <avr/io.h>
+//#include <avr/interrupt.h>
 #include <avr/sleep.h>
 #include <avr/power.h>    // Power management
 
-#define TM_16M 1
-#define TM_8M 2
-#define TM_1M 8
-//const byte TIME_MULTI = TM_1M;
+#define ATTINY13
 
 // Pin definitions
-const byte PIN_R = 0;		// Red
-const byte PIN_G = 1;		// Green
-const byte PIN_B = 3;		// Blue
-const byte SENSOR = 2;		// Tilt switch
-const byte UNUSED = 4;		// This is because we need to set unused pins to OUTPUT in order to conserve power
-const byte pins[3] = {PIN_R, PIN_G, PIN_B};		// Put the RGB pins here so we can iterate over them
+#define PIN_R 0
+#define PIN_G 1
+#define PIN_B 3
+#define SENSOR 2
+#define UNUSED 4
 
-
-const int DURATION = 500;				// MS shake needed to activate. Lower = faster but less secure activation
-const int SHAKE_ALLOWANCE = 300;		// MS between shake readings to consider it no longer being shaked
-const long SLEEP = 10800000;			// MS before auto turn off (10800000 = 3h)
-const int WAKEUP_GRACE_PERIOD = 1000;	// MS before entering sleep mode after turning the lamp off. This is to make it more responsive when turning it on and off rapidly to change colors. Higher = more responsive, Lower = Less power consumed from accidental bumps and shakes.
-
+#define DURATION 500				// MS shake needed to activate. Lower = faster but less secure activation
+#define SHAKE_ALLOWANCE 300			// MS between shake readings to consider it no longer being shaked
+#define SLEEP 10800000				// MS before auto turn off (10800000 = 3h)
+#define WAKEUP_GRACE_PERIOD 1000	// MS before entering sleep mode after turning the lamp off. This is to make it more responsive when turning it on and off rapidly to change colors. Higher = more responsive, Lower = Less power consumed from accidental bumps and shakes.
 
 long SHAKE_STARTED = 0;					// MS when we started shaking.
 long SHAKE_LAST_HIGH = 0;				// MS when the last LOW was detected on SENSOR.
@@ -41,39 +35,43 @@ void onShake(){
 	if( ON ){
 		// Since each light can only be on or off, we'll assign them a bit each
 		const byte R = 0x1, G = 0x2, B = 0x4;
-		// Array of color combinations
-		// I didn't put white here because 3x LEDs will pull so much power
-		// But if you don't care about power and want white, do R|G|B
-		const byte colors[6] = {
-			R|G,
-			R|B,
-			G|B,
-			R,
-			G,
-			B
-		};
-		// Pick a random color
-		color = colors[random(0,6)];
+		byte c = random(0,6);
+		switch(c){
+			case 0:
+				color = R|G;
+			case 1:
+				color = R|B;
+			case 2:
+				color = G|B;
+			case 3:
+				color = R;
+			case 4:
+				color = G;
+			case 5:
+				color = B;
+			
+		}
 	}
 
 	// Write the colors
-	byte i;
-	for(i=0; i<3; ++i)
-		digitalWrite(pins[i], !(color&(1<<i)));
-
+	digitalWrite(PIN_R, !(color&1));
+	digitalWrite(PIN_R, !(color&2));
+	digitalWrite(PIN_R, !(color&4));
 }
 
 // Blinks a pin N times. Used for init and debugging
-void blinkPin( byte pin, byte times ){
+#ifndef ATTINY13
+	void blinkPin( byte pin, byte times ){
 
-	for( byte i =0; i<times; ++i ){
-		digitalWrite(pin, LOW);
-		delay(100);
-		digitalWrite(pin, HIGH);
-		delay(100);
+		for( byte i =0; i<times; ++i ){
+			digitalWrite(pin, LOW);
+			delay(100);
+			digitalWrite(pin, HIGH);
+			delay(100);
+		}
+
 	}
-
-}
+#endif
 
 // Not sure if this is needed, and never actually triggers. But attachInterrupt uses it
 void onWakeup(){}
@@ -89,9 +87,7 @@ void sleep(){
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
     sleep_enable();                          // enables the sleep bit in the mcucr register so sleep is possible
     attachInterrupt(0, onWakeup, LOW);     // use interrupt 0 (pin 2) and run function wakeUpNow when pin 2 gets LOW
-    
     sleep_mode();                          // here the device is actually put to sleep!!
-    
 	// Waking up
     sleep_disable();                       // first thing after waking from sleep: disable sleep...
     detachInterrupt(0);                    // disables interrupton pin 3 so the wakeUpNow code will not be executed during normal running time.	
@@ -103,19 +99,18 @@ void sleep(){
 // IT BEGINS
 void setup(){
 
-	// Not sure if this works, but it doesn't matter that much
-	randomSeed(analogRead(UNUSED));
-
 	// Set all LEDs to OUTPUT and HIGH (because we're using common anode RGB, otherwise you'd use HIGH to turn on)
-	byte i;
-	for( i=0; i<3; ++i ){
-		pinMode(pins[i], OUTPUT);
-		digitalWrite(pins[i], HIGH);
-	}
+	pinMode(PIN_R, OUTPUT);
+	digitalWrite(PIN_R, HIGH);
+	pinMode(PIN_G, OUTPUT);
+	digitalWrite(PIN_G, HIGH);
+	pinMode(PIN_B, OUTPUT);
+	digitalWrite(PIN_B, HIGH);
 	
 	// Blink the green pin 4 times to signify that we now have power (useful for debugging)
+	#ifndef ATTINY13
 	blinkPin(PIN_G, 4);
-
+	#endif
 	// Enable the sensor
 	pinMode(SENSOR, INPUT_PULLUP);
 	//digitalWrite(SENSOR, HIGH);
@@ -123,13 +118,15 @@ void setup(){
 	// Power saving measures
 	ADCSRA &= ~ bit(ADEN); // disable the ADC
 	power_adc_disable();
-	power_usi_disable();
-	power_timer1_disable();
+	// 13 doesn't have these
+	#ifndef ATTINY13
+		power_usi_disable();
+		power_timer1_disable();
+	#endif
 
 	pinMode(UNUSED, OUTPUT);
 	digitalWrite(UNUSED, LOW);
 
-	//onShake();
 	// Set woke time to prevent it from sleeping immediately
 	TIME_WOKE = millis();
 
