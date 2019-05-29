@@ -1,28 +1,23 @@
-//#include <arduino.h>
-//#include <avr/io.h>
-//#include <avr/interrupt.h>
-#include <avr/sleep.h>
-#include <avr/power.h>    // Power management
-
 #define ATTINY13
+#include <avr/sleep.h>
+//#include <avr/power.h>    // Power management
 
 // Pin definitions
 #define PIN_R 0
 #define PIN_G 1
 #define PIN_B 3
 #define SENSOR 2
-#define UNUSED 4
 
 #define DURATION 500				// MS shake needed to activate. Lower = faster but less secure activation
 #define SHAKE_ALLOWANCE 300			// MS between shake readings to consider it no longer being shaked
 #define SLEEP 10800000				// MS before auto turn off (10800000 = 3h)
 #define WAKEUP_GRACE_PERIOD 1000	// MS before entering sleep mode after turning the lamp off. This is to make it more responsive when turning it on and off rapidly to change colors. Higher = more responsive, Lower = Less power consumed from accidental bumps and shakes.
 
-long SHAKE_STARTED = 0;					// MS when we started shaking.
-long SHAKE_LAST_HIGH = 0;				// MS when the last LOW was detected on SENSOR.
+unsigned long SHAKE_STARTED = 0;					// MS when we started shaking.
+unsigned long SHAKE_LAST_HIGH = 0;				// MS when the last LOW was detected on SENSOR.
 bool ON = false;						// Whether the light is on or not
-long TIME_LIT = 0;						// MS when the light was turned on (0 if off)
-long TIME_WOKE = 0;						// MS when the attiny woke up from sleep
+unsigned long TIME_LIT = 0;						// MS when the light was turned on (0 if off)
+unsigned long TIME_WOKE = 0;						// MS when the attiny woke up from sleep
 
 
 // After successfully shaking the sphere.
@@ -83,7 +78,6 @@ void sleep(){
 	onShake();
 	
 	// Enters sleep mode
-	//power_all_disable();
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
     sleep_enable();                          // enables the sleep bit in the mcucr register so sleep is possible
     attachInterrupt(0, onWakeup, LOW);     // use interrupt 0 (pin 2) and run function wakeUpNow when pin 2 gets LOW
@@ -109,23 +103,22 @@ void setup(){
 	
 	// Blink the green pin 4 times to signify that we now have power (useful for debugging)
 	#ifndef ATTINY13
-	blinkPin(PIN_G, 4);
+		blinkPin(PIN_G, 4);
 	#endif
+
 	// Enable the sensor
 	pinMode(SENSOR, INPUT_PULLUP);
 	//digitalWrite(SENSOR, HIGH);
 
 	// Power saving measures
 	ADCSRA &= ~ bit(ADEN); // disable the ADC
-	power_adc_disable();
 	// 13 doesn't have these
 	#ifndef ATTINY13
+		//power_adc_disable();
 		power_usi_disable();
 		power_timer1_disable();
 	#endif
 
-	pinMode(UNUSED, OUTPUT);
-	digitalWrite(UNUSED, LOW);
 
 	// Set woke time to prevent it from sleeping immediately
 	TIME_WOKE = millis();
@@ -135,10 +128,10 @@ void setup(){
 
 void loop(){
 
-	long ms = millis();		// Getting the time
+	const unsigned long ms = millis();		// Getting the time
 
 	// Auto turnoff after SLEEP milliseconds
-	if( ON && ms > TIME_LIT+SLEEP ){
+	if( ON && ms-TIME_LIT < SLEEP ){
 		sleep();
 		return;
 	}
@@ -152,7 +145,7 @@ void loop(){
 		if( !SHAKE_STARTED )
 			SHAKE_STARTED = ms;
 		// We have been shaking for enough time, toggle the lamp
-		else if( ms > SHAKE_STARTED+DURATION ){			
+		else if( ms-SHAKE_STARTED < DURATION ){			
 
 			SHAKE_STARTED = 0;	// Indicate we're no longer shaking
 			
@@ -171,7 +164,7 @@ void loop(){
 	}
 
 	// There has been no shake detected for SHAKE_ALLOWANCE milliseconds since the last detected shake
-	else if( ms > SHAKE_LAST_HIGH+SHAKE_ALLOWANCE ){
+	else if( ms-SHAKE_LAST_HIGH < SHAKE_ALLOWANCE ){
 		
 		// Clear the shake timers
 		SHAKE_STARTED = 0;
