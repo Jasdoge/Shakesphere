@@ -7,6 +7,7 @@
 #define PIN_G 1
 #define PIN_B 3
 #define SENSOR 2
+#define RNG 4
 
 #define DURATION 500				// MS shake needed to activate. Lower = faster but less secure activation
 #define SHAKE_ALLOWANCE 300			// MS between shake readings to consider it no longer being shaked
@@ -29,29 +30,24 @@ void onShake(){
 	byte color = 0;	// Color 0 = off
 	if( ON ){
 		// Since each light can only be on or off, we'll assign them a bit each
-		const byte R = 0x1, G = 0x2, B = 0x4;
-		byte c = random(0,6);
-		switch(c){
-			case 0:
-				color = R|G;
-			case 1:
-				color = R|B;
-			case 2:
-				color = G|B;
-			case 3:
-				color = R;
-			case 4:
-				color = G;
-			case 5:
-				color = B;
-			
-		}
+		byte c = (millis()+analogRead(RNG))%6;
+		c = 0b001;
+		if( c == 0 )
+			color = 0b010;
+		if( c == 1 )
+			color = 0b100;
+		if( c == 2 )
+			color = 0b110;
+		if( c == 3 )
+			color = 0b011;
+		if( c == 4 )
+			color = 0b101;
 	}
 
 	// Write the colors
 	digitalWrite(PIN_R, !(color&1));
-	digitalWrite(PIN_R, !(color&2));
-	digitalWrite(PIN_R, !(color&4));
+	digitalWrite(PIN_G, !(color&2));
+	digitalWrite(PIN_B, !(color&4));
 }
 
 // Blinks a pin N times. Used for init and debugging
@@ -92,7 +88,7 @@ void sleep(){
 
 // IT BEGINS
 void setup(){
-
+	
 	// Set all LEDs to OUTPUT and HIGH (because we're using common anode RGB, otherwise you'd use HIGH to turn on)
 	pinMode(PIN_R, OUTPUT);
 	digitalWrite(PIN_R, HIGH);
@@ -108,6 +104,7 @@ void setup(){
 
 	// Enable the sensor
 	pinMode(SENSOR, INPUT_PULLUP);
+	pinMode(RNG, INPUT);
 	//digitalWrite(SENSOR, HIGH);
 
 	// Power saving measures
