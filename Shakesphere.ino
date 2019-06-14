@@ -1,23 +1,33 @@
-#include <arduino.h>
 #include <avr/sleep.h>
-// Pin definitions
-#define PIN_R PB0
-#define PIN_G PB1
-#define PIN_B PB2
-#define SENSOR PB3
-#define RNG PB4
+
+//#define DEBUG_BLINKS
+
+//#define LEGACY
+#ifndef LEGACY
+	#define PIN_R PB0
+	#define PIN_G PB1
+	#define PIN_B PB2
+	#define SENSOR PCINT3
+	#define RNG PB4
+#else
+	#define PIN_R PB0
+	#define PIN_G PB1
+	#define PIN_B PB3
+	#define SENSOR PCINT2
+	#define RNG PB4
+#endif
+
+#define SHAKE_ON LOW
 
 
 #define DURATION 500				// MS shake needed to activate. Lower = faster but less secure activation
 #define SHAKE_ALLOWANCE 300			// MS between shake readings to consider it no longer being shaked
 #define SLEEP 10800000				// MS before auto turn off (10800000 = 3h)
-#define WAKEUP_GRACE_PERIOD 1000	// MS before entering sleep mode after turning the lamp off. This is to make it more responsive when turning it on and off rapidly to change colors. Higher = more responsive, Lower = Less power consumed from accidental bumps and shakes.
 
 unsigned long SHAKE_STARTED = 0;				// MS when we started shaking.
 unsigned long SHAKE_LAST_HIGH = 0;				// MS when the last LOW was detected on SENSOR.
 bool ON = false;								// Whether the light is on or not
 unsigned long TIME_LIT = 0;						// MS when the light was turned on (0 if off)
-unsigned long TIME_WOKE = 0;					// MS when the attiny woke up from sleep
 
 
 // After successfully shaking the sphere.
@@ -52,23 +62,35 @@ void onShake(){
 ISR(PCINT0_vect){}
 
 void sleep(){
-	
+
+	#ifdef DEBUG_BLINKS
+		for( byte i=0; i<3; ++i ){
+			digitalWrite(PIN_R, LOW);
+			delay(100);
+			digitalWrite(PIN_R, HIGH);
+			delay(100);
+		}
+	#endif
+
 	// Turns off
 	ON = true;
 	onShake();
 	
-	// Enters sleep mode
-	set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
-    sleep_enable();                          // enables the sleep bit in the mcucr register so sleep is possible
-	
-	GIMSK = 0b00100000;    // turns on pin change interrupts
-  	PCMSK = 0b00001000;    // turn on interrupt on pins PB3
+	GIMSK |= _BV(PCIE);    // turns on pin change interrupts
+  	PCMSK |= _BV(SENSOR);    // turn on interrupt on sensor pin
 
-    sleep_mode();                          // here the device is actually put to sleep!!
-	// Waking up
-    sleep_disable();                       // first thing after waking from sleep: disable sleep...
-    detachInterrupt(0);                    // disables interrupton pin 3 so the wakeUpNow code will not be executed during normal running time.	
-	TIME_WOKE = millis();
+	// Enters sleep mode
+    //sleep_enable();                          // enables the sleep bit in the mcucr register so sleep is possible
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);    // replaces above statement
+	sleep_mode();
+
+  	PCMSK &= ~_BV(SENSOR);    // interrupt off
+	#ifdef DEBUG_BLINKS
+		digitalWrite(PIN_R, LOW);
+		delay(1000);
+		digitalWrite(PIN_R, HIGH);
+	#endif
+	SHAKE_LAST_HIGH = millis();
 
 }
 
@@ -85,11 +107,7 @@ void setup(){
 	//digitalWrite(SENSOR, HIGH);
 
 	// Power saving measures
-	ADCSRA &= ~ bit(ADEN); // disable the ADC
-
-	// Set woke time to prevent it from sleeping immediately
-	TIME_WOKE = millis();
-
+	ADCSRA &= ~_BV(ADEN); // disable the ADC
 }
 
 
@@ -100,18 +118,19 @@ void loop(){
 	// Auto turnoff after SLEEP milliseconds
 	if( ON && ms-TIME_LIT > SLEEP ){
 		sleep();
+		return;
 	}
-
+	
+	
 	// If SENSOR is LOW, we're shaking it or holding it upside down
-	else if( !digitalRead(SENSOR) ){
+	if( digitalRead(SENSOR) == SHAKE_ON ){
 
 		SHAKE_LAST_HIGH = ms;	// Sets so we can tell that we're still shaking it or holding it upside down
 
 		// We haven't detected shaking yet, so set this as the start time for shake
-		if( !SHAKE_STARTED ){
-			// Debug: Blink once when shake starts
+		if( !SHAKE_STARTED )
 			SHAKE_STARTED = ms;
-		}
+
 		// We have been shaking for enough time, toggle the lamp
 		else if( ms-SHAKE_STARTED > DURATION ){			
 
@@ -120,29 +139,25 @@ void loop(){
 			// Toggle the lights
 			onShake();
 			
-			// If the light is now off, schedule the sphere to sleep after a timeout unless we start shaking it again
-			if( !ON )
-				TIME_WOKE = ms;
-			// Otherwise set the time we lit it so we know when to auto turn off to save power
-			else
+			// set the time we lit it so we know when to auto turn off to save power
+			if( ON )
 				TIME_LIT = ms;
 			
 		}
-
+		return;
 	}
 
 	// There has been no shake detected for SHAKE_ALLOWANCE milliseconds since the last detected shake
-	else if( ms-SHAKE_LAST_HIGH > SHAKE_ALLOWANCE ){
+	if( ms-SHAKE_LAST_HIGH > SHAKE_ALLOWANCE ){
 		
 		// Clear the shake timers
 		SHAKE_STARTED = 0;
 		SHAKE_LAST_HIGH = 0;
 
 		// If we're not shaking and the device isn't on. Sleep unless we're in the grace period
-		if( !ON && ms-TIME_WOKE > WAKEUP_GRACE_PERIOD )
+		if( !ON )
 			sleep();
 
 	}
-
 
 }
